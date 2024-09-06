@@ -1,0 +1,162 @@
+import Foundation
+
+/// Function to create a README file with icon requirements
+func createReadMeFile(in directory: URL) {
+    let readmeContent = """
+    # Chrome Extension Icon Requirements
+
+    The following icons are required for your Chrome extension. Please place them in this folder and name them as specified below.
+
+    ## Required Icons
+
+    - **icon16.png**: 16x16 pixels
+    - **icon48.png**: 48x48 pixels
+    - **icon128.png**: 128x128 pixels
+
+    ## Usage in manifest.json
+
+    Update your `manifest.json` file to include icons with the following format:
+
+    ```json
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+    ```
+    """
+    let readmeURL = directory.appendingPathComponent("README.txt")
+    
+    do {
+        try readmeContent.write(to: readmeURL, atomically: true, encoding: .utf8)
+        print("README.txt created successfully at \(readmeURL.path)")
+    } catch {
+        print("Error creating README.txt: \(error.localizedDescription)")
+    }
+}
+
+/// Function to generate the Chrome extension
+func generateExtension(for urlString: String, to directory: String, includeFavicon: Bool) {
+    guard let url = URL(string: urlString), url.scheme != nil, url.host != nil else {
+        print("Error: Invalid URL. Please enter a valid URL with scheme (e.g., https://).")
+        return
+    }
+
+    // Determine extension name from URL
+    let host = url.host ?? "default-extension-name"
+    let extensionName = host.replacingOccurrences(of: "https://", with: "")
+                            .replacingOccurrences(of: ".com", with: "")
+                            .replacingOccurrences(of: "www.", with: "")
+                            .replacingOccurrences(of: ".", with: "_")
+
+    let extensionDirectory = URL(fileURLWithPath: directory).appendingPathComponent("ChromeExtension")
+
+    do {
+        try FileManager.default.createDirectory(at: extensionDirectory, withIntermediateDirectories: true, attributes: nil)
+
+        let manifestContent: String
+        if includeFavicon {
+            manifestContent = """
+            {
+                "manifest_version": 2,
+                "name": "\(extensionName)",
+                "version": "1.0",
+                "background": {
+                    "scripts": ["background.js"]
+                },
+                "browser_action": {
+                    "default_popup": "",
+                    "default_icon": {
+                        "16": "icons/icon16.png"
+                    }
+                },
+                "permissions": ["tabs"],
+                "icons": {
+                    "16": "icons/icon16.png",
+                    "48": "icons/icon48.png",
+                    "128": "icons/icon128.png"
+                }
+            }
+            """
+            let iconsDirectory = extensionDirectory.appendingPathComponent("icons")
+            try FileManager.default.createDirectory(at: iconsDirectory, withIntermediateDirectories: true, attributes: nil)
+            createReadMeFile(in: iconsDirectory)
+            print("Icons folder and README.txt created.")
+        } else {
+            manifestContent = """
+            {
+                "manifest_version": 2,
+                "name": "\(extensionName)",
+                "version": "1.0",
+                "background": {
+                    "scripts": ["background.js"]
+                },
+                "browser_action": {
+                    "default_popup": "",
+                    "default_icon": {}  // Removed icon reference
+                    }
+                }
+                "permissions": ["tabs"]
+            }
+            """
+            // Remove icons folder if it exists
+            let iconsDirectory = extensionDirectory.appendingPathComponent("icons")
+            if FileManager.default.fileExists(atPath: iconsDirectory.path) {
+                do {
+                    try FileManager.default.removeItem(at: iconsDirectory)
+                    print("Removed existing 'icons' folder.")
+                } catch {
+                    print("Error removing 'icons' folder: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        let backgroundJSContent = """
+        chrome.browserAction.onClicked.addListener(function(tab) {
+            chrome.tabs.create({ url: "\(url.absoluteString)" });
+        });
+        """
+
+        let manifestURL = extensionDirectory.appendingPathComponent("manifest.json")
+        let backgroundJSURL = extensionDirectory.appendingPathComponent("background.js")
+
+        try manifestContent.write(to: manifestURL, atomically: true, encoding: .utf8)
+        try backgroundJSContent.write(to: backgroundJSURL, atomically: true, encoding: .utf8)
+        
+    } catch {
+        print("Error creating extension: \(error.localizedDescription)")
+    }
+}
+
+/// Function to prompt the user for input
+func promptUser() -> (urlString: String, directory: String, includeFavicon: Bool)? {
+    print("Do you want to include favicons? (Y/N):")
+    guard let includeFaviconInput = readLine(), includeFaviconInput.lowercased() == "y" || includeFaviconInput.lowercased() == "n" else {
+        print("Error: Invalid input. Please enter 'Y' or 'N'.")
+        return nil
+    }
+    
+    let includeFavicon = includeFaviconInput.lowercased() == "y"
+
+    print("Enter the URL for the Chrome extension:")
+    guard let urlString = readLine(), !urlString.isEmpty else {
+        print("Error: URL cannot be empty.")
+        return nil
+    }
+
+    print("Enter the directory where you want to save the Chrome extension files:")
+    guard let directory = readLine(), !directory.isEmpty else {
+        print("Error: Directory cannot be empty.")
+        return nil
+    }
+
+    return (urlString, directory, includeFavicon)
+}
+
+// Main function
+if let (urlString, outputDirectory, includeFavicon) = promptUser() {
+    generateExtension(for: urlString, to: outputDirectory, includeFavicon: includeFavicon)
+} else {
+    print("Usage: ChromeExtensionGenerator")
+    print("Please run the program again and provide valid inputs.")
+}
